@@ -1,0 +1,25 @@
+name: Build iOS App
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build App
+        run: |
+          xcodebuild -project MyJeansApp.xcodeproj \
+          -scheme MyJeansApp \
+          -destination 'platform=iOS Simulator,name=iPhone 14' \
+          -derivedDataPath build \
+          CODE_SIGNING_ALLOWED=NO \
+          build
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app-file
+          path: build/Build/Products/Debug-iphonesimulator/MyJeansApp.app
