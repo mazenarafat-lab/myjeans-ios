@@ -5,8 +5,7 @@ class NotificationService: UNNotificationServiceExtension {
     var contentHandler: ((UNNotificationContent) -> Void)?
     var bestAttemptContent: UNMutableNotificationContent?
 
-    override func didReceive(_ request: UNNotificationRequest,
-                             withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
+    override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
         self.contentHandler = contentHandler
         bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
 
@@ -15,10 +14,14 @@ class NotificationService: UNNotificationServiceExtension {
             return
         }
 
-        // Check for image URL in the data payload
-        let imageURLString = bestAttemptContent.userInfo["image"] as? String
-            ?? bestAttemptContent.userInfo["fcm_options"] as? [String: Any]
-                .flatMap { $0["image"] as? String }
+        // Fix: Safely extract the image URL from userInfo or fcm_options
+        var imageURLString: String? = bestAttemptContent.userInfo["image"] as? String
+        
+        if imageURLString == nil {
+            if let fcmOptions = bestAttemptContent.userInfo["fcm_options"] as? [String: Any] {
+                imageURLString = fcmOptions["image"] as? String
+            }
+        }
 
         guard let urlString = imageURLString, !urlString.isEmpty,
               let imageURL = URL(string: urlString) else {
@@ -26,7 +29,6 @@ class NotificationService: UNNotificationServiceExtension {
             return
         }
 
-        // Download the image and attach it to the notification
         downloadImage(from: imageURL) { attachment in
             if let attachment = attachment {
                 bestAttemptContent.attachments = [attachment]
@@ -36,7 +38,6 @@ class NotificationService: UNNotificationServiceExtension {
     }
 
     override func serviceExtensionTimeWillExpire() {
-        // Deliver the best attempt content before time expires
         if let contentHandler = contentHandler, let bestAttemptContent = bestAttemptContent {
             contentHandler(bestAttemptContent)
         }
@@ -45,13 +46,11 @@ class NotificationService: UNNotificationServiceExtension {
     private func downloadImage(from url: URL, completion: @escaping (UNNotificationAttachment?) -> Void) {
         let task = URLSession.shared.downloadTask(with: url) { downloadedURL, response, error in
             guard let downloadedURL = downloadedURL, error == nil else {
-                print("FCM: Failed to download notification image: \(error?.localizedDescription ?? "unknown")")
                 completion(nil)
                 return
             }
 
-            // Move to a temporary location with proper file extension
-            let fileExtension = self.fileExtension(from: response, url: url)
+            let fileExtension = self.getFileExtension(from: response, url: url)
             let tmpURL = URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent(UUID().uuidString + fileExtension)
 
@@ -60,14 +59,13 @@ class NotificationService: UNNotificationServiceExtension {
                 let attachment = try UNNotificationAttachment(identifier: "image", url: tmpURL, options: nil)
                 completion(attachment)
             } catch {
-                print("FCM: Failed to create notification attachment: \(error.localizedDescription)")
                 completion(nil)
             }
         }
         task.resume()
     }
 
-    private func fileExtension(from response: URLResponse?, url: URL) -> String {
+    private func getFileExtension(from response: URLResponse?, url: URL) -> String {
         if let mimeType = response?.mimeType {
             switch mimeType {
             case "image/jpeg": return ".jpg"
@@ -77,12 +75,7 @@ class NotificationService: UNNotificationServiceExtension {
             default: break
             }
         }
-
-        let pathExtension = url.pathExtension.lowercased()
-        if !pathExtension.isEmpty {
-            return "." + pathExtension
-        }
-
-        return ".jpg"
+        let pathExt = url.pathExtension.lowercased()
+        return pathExt.isEmpty ? ".jpg" : "." + pathExt
     }
 }
