@@ -1,17 +1,13 @@
 name: Build iOS App
-
 on:
   push:
     branches: [ "903693b" ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
@@ -21,12 +17,13 @@ jobs:
     - name: Install CocoaPods
       run: |
         gem install cocoapods
+        pod repo add-cdn trunk https://cdn.cocoapods.org/
         pod install --repo-update
 
-    - name: Create GoogleService-Info.plist
+    - name: Ensure Directory and Create GoogleService-Info.plist
       run: |
         mkdir -p MyJeansApp
-        cat > MyJeansApp/GoogleService-Info.plist << EOF
+        cat > MyJeansApp/GoogleService-Info.plist << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
@@ -47,43 +44,41 @@ jobs:
 
     - name: Build for Simulator
       run: |
-        set -o pipefail
-
+        # Build without forcing a path - let Xcode use its default cache
         xcodebuild build \
           -workspace MyJeansApp.xcworkspace \
           -scheme MyJeansApp \
           -sdk iphonesimulator \
-          -destination 'generic/platform=iOS Simulator' \
+          -destination 'platform=iOS Simulator,name=iPhone 16' \
           -configuration Debug \
-          -derivedDataPath build_output \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
-          || exit 1
+          | tail -50
 
-    - name: Locate App
+    - name: Package App (Deep Scan)
       run: |
-        echo "Searching for .app bundle..."
-        find build_output -name "*.app"
-
-    - name: Package App
-      run: |
-        APP_PATH=$(find build_output -name "*.app" | head -1)
-
-        if [ -z "$APP_PATH" ]; then
-          echo "ERROR: No .app found!"
+        echo "Searching the entire server for the app bundle..."
+        # This finds the real .app folder anywhere in the system-wide build cache
+        REAL_APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d | grep "Debug-iphonesimulator" | head -1)
+        
+        if [ -z "$REAL_APP_PATH" ]; then
+          echo "ERROR: Could not find any .app bundle in Xcode cache!"
           exit 1
         fi
+        
+        echo "Found App at: $REAL_APP_PATH"
+        mkdir -p final_payload
+        
+        # Copy the actual folder (dereferencing symlinks)
+        cp -RL "$REAL_APP_PATH" final_payload/
+        
+        # Rename it to a standard name for the zip
+        mv final_payload/*.app final_payload/MyJeansApp.app
+        
+        cd final_payload && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
 
-        echo "Found app at: $APP_PATH"
-
-        mkdir Payload
-        cp -R "$APP_PATH" Payload/
-
-        cd Payload
-        zip -r ../MyJeansApp-Simulator.zip .
-
-    - name: Upload Artifact
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
         name: MyJeansApp-Simulator
