@@ -74,7 +74,7 @@ jobs:
           -sdk iphonesimulator \
           -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
           -configuration Debug \
-          CONFIGURATION_BUILD_DIR=build/output \
+          SYMROOT=$(PWD)/build \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
@@ -82,15 +82,25 @@ jobs:
 
     - name: Prepare .app artifact
       run: |
-        echo "Searching for app in build/output..."
-        ls -R build/output
-        mkdir -p build/artifact
-        cp -R build/output/MyJeansApp.app build/artifact/
-        cd build/artifact && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
+        echo "Searching for the real app bundle..."
+        # Locate the .app folder inside the build directory
+        APP_PATH=$(find build/Debug-iphonesimulator -name "MyJeansApp.app" -type d | head -1)
+        
+        if [ -z "$APP_PATH" ]; then
+          echo "Error: MyJeansApp.app not found!"
+          exit 1
+        fi
+        
+        echo "Found app at: $APP_PATH"
+        mkdir -p artifact
+        cp -R "$APP_PATH" artifact/
+        
+        # Zip with -ry to preserve internal frameworks and symlinks
+        cd artifact && zip -ry ../MyJeansApp-Simulator.zip MyJeansApp.app
 
     - name: Upload Simulator Build
       uses: actions/upload-artifact@v4
       with:
         name: MyJeansApp-Simulator
-        path: build/MyJeansApp-Simulator.zip
+        path: MyJeansApp-Simulator.zip
         retention-days: 30
