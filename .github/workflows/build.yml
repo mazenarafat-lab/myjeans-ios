@@ -1,13 +1,17 @@
 name: Build iOS App
+
 on:
   push:
     branches: [ "903693b" ]
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: macos-latest
+
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
@@ -17,13 +21,12 @@ jobs:
     - name: Install CocoaPods
       run: |
         gem install cocoapods
-        pod repo add-cdn trunk https://cdn.cocoapods.org/
         pod install --repo-update
 
-    - name: Ensure Directory and Create GoogleService-Info.plist
+    - name: Create GoogleService-Info.plist
       run: |
         mkdir -p MyJeansApp
-        cat > MyJeansApp/GoogleService-Info.plist << 'EOF'
+        cat > MyJeansApp/GoogleService-Info.plist << EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
@@ -44,31 +47,43 @@ jobs:
 
     - name: Build for Simulator
       run: |
-        # Create a physical folder for the output
-        mkdir -p $(pwd)/build_final
-        
+        set -o pipefail
+
         xcodebuild build \
           -workspace MyJeansApp.xcworkspace \
           -scheme MyJeansApp \
           -sdk iphonesimulator \
-          -destination 'platform=iOS Simulator,name=iPhone 16' \
+          -destination 'generic/platform=iOS Simulator' \
           -configuration Debug \
-          CONFIGURATION_BUILD_DIR=$(pwd)/build_final \
+          -derivedDataPath build_output \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
-          | tail -50
+          || exit 1
+
+    - name: Locate App
+      run: |
+        echo "Searching for .app bundle..."
+        find build_output -name "*.app"
 
     - name: Package App
       run: |
-        echo "Verifying build contents..."
-        ls -lh build_final/
-        
-        # Zip the folder that we FORCED the build into
-        # We zip the .app folder directly from our custom directory
-        cd build_final && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
+        APP_PATH=$(find build_output -name "*.app" | head -1)
 
-    - name: Upload
+        if [ -z "$APP_PATH" ]; then
+          echo "ERROR: No .app found!"
+          exit 1
+        fi
+
+        echo "Found app at: $APP_PATH"
+
+        mkdir Payload
+        cp -R "$APP_PATH" Payload/
+
+        cd Payload
+        zip -r ../MyJeansApp-Simulator.zip .
+
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: MyJeansApp-Simulator
