@@ -9,24 +9,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Ruby (for CocoaPods)
+    - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
         ruby-version: '3.2'
-        bundler-cache: false
 
     - name: Install CocoaPods
-      run: gem install cocoapods
+      run: |
+        gem install cocoapods
+        pod repo add-cdn trunk https://cdn.cocoapods.org/
+        pod install --repo-update
 
-    - name: Cache CocoaPods
-      uses: actions/cache@v4
-      with:
-        path: Pods
-        key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-pods-
-
-    - name: Create placeholder GoogleService-Info.plist
+    - name: Create GoogleService-Info.plist
       run: |
         cat > MyJeansApp/GoogleService-Info.plist << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
@@ -37,71 +31,42 @@ jobs:
             <string>${{ secrets.FIREBASE_API_KEY }}</string>
             <key>GCM_SENDER_ID</key>
             <string>${{ secrets.FIREBASE_GCM_SENDER_ID }}</string>
-            <key>PLIST_VERSION</key>
-            <string>1</string>
             <key>BUNDLE_ID</key>
             <string>com.myjeans.app</string>
             <key>PROJECT_ID</key>
             <string>myjeans-app-v3</string>
-            <key>STORAGE_BUCKET</key>
-            <string>myjeans-app-v3.appspot.com</string>
-            <key>IS_ADS_ENABLED</key>
-            <false/>
-            <key>IS_ANALYTICS_ENABLED</key>
-            <false/>
-            <key>IS_APPINVITE_ENABLED</key>
-            <true/>
-            <key>IS_GCM_ENABLED</key>
-            <true/>
-            <key>IS_SIGNIN_ENABLED</key>
-            <true/>
             <key>GOOGLE_APP_ID</key>
             <string>${{ secrets.FIREBASE_GOOGLE_APP_ID }}</string>
         </dict>
         </plist>
         EOF
 
-    - name: Install Pods
+    - name: Archive App (The Professional Way)
       run: |
-        pod repo add-cdn trunk https://cdn.cocoapods.org/
-        pod install --repo-update
-
-    - name: Build iOS App (Simulator)
-      run: |
-        xcodebuild build \
+        xcodebuild archive \
           -workspace MyJeansApp.xcworkspace \
           -scheme MyJeansApp \
           -sdk iphonesimulator \
-          -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
           -configuration Debug \
-          -derivedDataPath $(PWD)/build \
+          -archivePath build/MyJeansApp.xcarchive \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY="" \
-          | tail -30
+          CODE_SIGN_IDENTITY=""
 
-    - name: Prepare .app artifact
+    - name: Extract and Zip App
       run: |
-        echo "Searching for the real app bundle..."
-        # Deep search within our local build directory
-        APP_PATH=$(find build -name "MyJeansApp.app" -type d -path "*/Debug-iphonesimulator/*" | head -1)
+        # In an archive, the .app is ALWAYS in this specific sub-folder
+        APP_PATH="build/MyJeansApp.xcarchive/Products/Applications/MyJeansApp.app"
         
-        if [ -z "$APP_PATH" ]; then
-          echo "Error: MyJeansApp.app not found! Printing build directory structure:"
-          ls -R build
-          exit 1
-        fi
+        echo "Extracting app from archive..."
+        mkdir -p final_output
+        cp -RL "$APP_PATH" final_output/
         
-        echo "Found app at: $APP_PATH"
-        mkdir -p artifact
-        cp -R "$APP_PATH" artifact/
-        
-        # Zip with -ry to preserve internal frameworks and symlinks
-        cd artifact && zip -ry ../MyJeansApp-Simulator.zip MyJeansApp.app
+        cd final_output && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
 
-    - name: Upload Simulator Build
+    - name: Upload Build
       uses: actions/upload-artifact@v4
       with:
         name: MyJeansApp-Simulator
         path: MyJeansApp-Simulator.zip
-        retention-days: 30
+        retention-days: 7
