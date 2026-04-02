@@ -74,7 +74,7 @@ jobs:
           -sdk iphonesimulator \
           -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
           -configuration Debug \
-          SYMROOT=$(PWD)/build \
+          -derivedDataPath $(PWD)/build \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
@@ -83,11 +83,12 @@ jobs:
     - name: Prepare .app artifact
       run: |
         echo "Searching for the real app bundle..."
-        # Locate the .app folder inside the build directory
-        APP_PATH=$(find build/Debug-iphonesimulator -name "MyJeansApp.app" -type d | head -1)
+        # Deep search within our local build directory
+        APP_PATH=$(find build -name "MyJeansApp.app" -type d -path "*/Debug-iphonesimulator/*" | head -1)
         
         if [ -z "$APP_PATH" ]; then
-          echo "Error: MyJeansApp.app not found!"
+          echo "Error: MyJeansApp.app not found! Printing build directory structure:"
+          ls -R build
           exit 1
         fi
         
