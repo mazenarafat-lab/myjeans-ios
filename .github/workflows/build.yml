@@ -20,8 +20,9 @@ jobs:
         pod repo add-cdn trunk https://cdn.cocoapods.org/
         pod install --repo-update
 
-    - name: Create GoogleService-Info.plist
+    - name: Ensure Directory and Create GoogleService-Info.plist
       run: |
+        mkdir -p MyJeansApp
         cat > MyJeansApp/GoogleService-Info.plist << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -41,32 +42,44 @@ jobs:
         </plist>
         EOF
 
-    - name: Archive App (The Professional Way)
+    - name: Build for Simulator
       run: |
-        xcodebuild archive \
+        xcodebuild build \
           -workspace MyJeansApp.xcworkspace \
           -scheme MyJeansApp \
           -sdk iphonesimulator \
+          -destination 'platform=iOS Simulator,name=iPhone 16' \
           -configuration Debug \
-          -archivePath build/MyJeansApp.xcarchive \
+          -derivedDataPath build_output \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY=""
+          CODE_SIGN_IDENTITY="" \
+          | tail -50
 
-    - name: Extract and Zip App
+    - name: Package App
       run: |
-        # In an archive, the .app is ALWAYS in this specific sub-folder
-        APP_PATH="build/MyJeansApp.xcarchive/Products/Applications/MyJeansApp.app"
+        echo "Searching for App..."
+        # Find the actual folder, ignoring any symbolic links first
+        REAL_APP_PATH=$(find build_output -name "MyJeansApp.app" -type d | grep "iphonesimulator" | head -1)
         
-        echo "Extracting app from archive..."
-        mkdir -p final_output
-        cp -RL "$APP_PATH" final_output/
+        if [ -z "$REAL_APP_PATH" ]; then
+          echo "ERROR: App bundle not found in build_output!"
+          ls -R build_output
+          exit 1
+        fi
         
-        cd final_output && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
+        echo "Found App at: $REAL_APP_PATH"
+        mkdir -p final_payload
+        
+        # Copy with -RL to turn shortcuts into real files
+        cp -RL "$REAL_APP_PATH" final_payload/
+        
+        # Zip it up
+        cd final_payload && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
 
-    - name: Upload Build
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
         name: MyJeansApp-Simulator
         path: MyJeansApp-Simulator.zip
-        retention-days: 7
+        retention-days: 5
