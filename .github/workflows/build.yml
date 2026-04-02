@@ -8,13 +8,16 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
+
     - name: Set up Ruby (for CocoaPods)
       uses: ruby/setup-ruby@v1
       with:
         ruby-version: '3.2'
         bundler-cache: false
+
     - name: Install CocoaPods
       run: gem install cocoapods
+
     - name: Cache CocoaPods
       uses: actions/cache@v4
       with:
@@ -22,6 +25,7 @@ jobs:
         key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
         restore-keys: |
           ${{ runner.os }}-pods-
+
     - name: Create placeholder GoogleService-Info.plist
       run: |
         cat > MyJeansApp/GoogleService-Info.plist << 'EOF'
@@ -56,8 +60,12 @@ jobs:
         </dict>
         </plist>
         EOF
+
     - name: Install Pods
-      run: pod install
+      run: |
+        pod repo add-cdn trunk https://cdn.cocoapods.org/
+        pod install --repo-update
+
     - name: Build iOS App (Simulator)
       run: |
         xcodebuild build \
@@ -71,6 +79,7 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
           | tail -30
+
     - name: Prepare .app artifact
       run: |
         APP_PATH=$(find build/DerivedData -name "MyJeansApp.app" -type d | head -1)
@@ -78,6 +87,7 @@ jobs:
         mkdir -p build/artifact
         cp -R "$APP_PATH" build/artifact/
         cd build/artifact && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
+
     - name: Upload Simulator Build
       uses: actions/upload-artifact@v4
       with:
