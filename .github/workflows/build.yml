@@ -44,13 +44,16 @@ jobs:
 
     - name: Build for Simulator
       run: |
+        # Create a physical folder for the output
+        mkdir -p $(pwd)/build_final
+        
         xcodebuild build \
           -workspace MyJeansApp.xcworkspace \
           -scheme MyJeansApp \
           -sdk iphonesimulator \
           -destination 'platform=iOS Simulator,name=iPhone 16' \
           -configuration Debug \
-          -derivedDataPath build_output \
+          CONFIGURATION_BUILD_DIR=$(pwd)/build_final \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
@@ -58,24 +61,12 @@ jobs:
 
     - name: Package App
       run: |
-        echo "Searching for App..."
-        # Find the actual folder, ignoring any symbolic links first
-        REAL_APP_PATH=$(find build_output -name "MyJeansApp.app" -type d | grep "iphonesimulator" | head -1)
+        echo "Verifying build contents..."
+        ls -lh build_final/
         
-        if [ -z "$REAL_APP_PATH" ]; then
-          echo "ERROR: App bundle not found in build_output!"
-          ls -R build_output
-          exit 1
-        fi
-        
-        echo "Found App at: $REAL_APP_PATH"
-        mkdir -p final_payload
-        
-        # Copy with -RL to turn shortcuts into real files
-        cp -RL "$REAL_APP_PATH" final_payload/
-        
-        # Zip it up
-        cd final_payload && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
+        # Zip the folder that we FORCED the build into
+        # We zip the .app folder directly from our custom directory
+        cd build_final && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
 
     - name: Upload
       uses: actions/upload-artifact@v4
