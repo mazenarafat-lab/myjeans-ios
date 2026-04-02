@@ -14,7 +14,7 @@ class NotificationService: UNNotificationServiceExtension {
             return
         }
 
-        // Fix: Safely extract the image URL from userInfo or fcm_options
+        // Logic: Try to find the image URL in the root or inside fcm_options
         var imageURLString: String? = bestAttemptContent.userInfo["image"] as? String
         
         if imageURLString == nil {
@@ -23,6 +23,7 @@ class NotificationService: UNNotificationServiceExtension {
             }
         }
 
+        // If we found a URL, download it; otherwise, just show the notification text
         guard let urlString = imageURLString, !urlString.isEmpty,
               let imageURL = URL(string: urlString) else {
             contentHandler(bestAttemptContent)
@@ -50,7 +51,8 @@ class NotificationService: UNNotificationServiceExtension {
                 return
             }
 
-            let fileExtension = self.getFileExtension(from: response, url: url)
+            // Using your MIME type logic to get the right extension
+            let fileExtension = self.determineExtension(from: response, url: url)
             let tmpURL = URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent(UUID().uuidString + fileExtension)
 
@@ -65,7 +67,7 @@ class NotificationService: UNNotificationServiceExtension {
         task.resume()
     }
 
-    private func getFileExtension(from response: URLResponse?, url: URL) -> String {
+    private func determineExtension(from response: URLResponse?, url: URL) -> String {
         if let mimeType = response?.mimeType {
             switch mimeType {
             case "image/jpeg": return ".jpg"
