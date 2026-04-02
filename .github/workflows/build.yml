@@ -74,7 +74,7 @@ jobs:
           -sdk iphonesimulator \
           -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
           -configuration Debug \
-          -derivedDataPath build/DerivedData \
+          CONFIGURATION_BUILD_DIR=build/output \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
@@ -82,10 +82,10 @@ jobs:
 
     - name: Prepare .app artifact
       run: |
-        APP_PATH=$(find build/DerivedData -name "MyJeansApp.app" -type d | head -1)
-        echo "Found app at: $APP_PATH"
+        echo "Searching for app in build/output..."
+        ls -R build/output
         mkdir -p build/artifact
-        cp -R "$APP_PATH" build/artifact/
+        cp -R build/output/MyJeansApp.app build/artifact/
         cd build/artifact && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
 
     - name: Upload Simulator Build
