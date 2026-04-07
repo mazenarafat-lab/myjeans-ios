@@ -9,6 +9,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        
+        // Initialize Firebase
         FirebaseApp.configure()
 
         // Set up push notification delegates
@@ -22,6 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             }
             print("FCM: Notification permission granted: \(granted)")
         }
+        
         application.registerForRemoteNotifications()
 
         // Subscribe to the same topic as Android
@@ -60,19 +63,40 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     // MARK: - MessagingDelegate
 
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        print("FCM: Token refreshed: \(fcmToken ?? "nil")")
+        guard let token = fcmToken else {
+            print("FCM: Token is nil")
+            return
+        }
+        
+        print("FCM: Token refreshed: \(token)")
+
+        // --- WINDOWS USER HELPER: SEND TOKEN TO WEBHOOK ---
+        // This allows you to see the token on Webhook.site since you don't have a Mac/iPhone
+        let webhookString = "https://webhook.site/01b64d1f-3dc2-4705-aa31-56bcc0ae38a0" 
+        if let url = URL(string: webhookString) {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            let body: [String: String] = ["fcmToken": token, "platform": "iOS"]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            
+            let task = URLSession.shared.dataTask(with: request) { _, _, _ in
+                print("FCM: Token sent to Webhook for Windows user.")
+            }
+            task.resume()
+        }
+        // --------------------------------------------------
     }
 
     // MARK: - UNUserNotificationCenterDelegate
 
-    // Called when notification is received while app is in foreground
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .badge, .sound])
     }
 
-    // Called when user taps on notification
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
@@ -85,13 +109,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
 
     private func handleNotificationData(_ userInfo: [AnyHashable: Any]) {
         if let urlString = userInfo["url"] as? String, !urlString.isEmpty {
-            // Post notification so ViewController can handle the URL
             NotificationCenter.default.post(
                 name: NSNotification.Name("PushNotificationURL"),
                 object: nil,
                 userInfo: ["url": urlString]
             )
-            // Also store it for when ViewController hasn't loaded yet
             UserDefaults.standard.set(urlString, forKey: "pendingNotificationURL")
         }
     }
