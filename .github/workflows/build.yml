@@ -27,81 +27,51 @@ jobs:
         mkdir -p MyJeansApp
         cat > MyJeansApp/GoogleService-Info.plist << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
             <key>API_KEY</key>
             <string>${{ secrets.FIREBASE_API_KEY }}</string>
             <key>GCM_SENDER_ID</key>
             <string>${{ secrets.FIREBASE_GCM_SENDER_ID }}</string>
-            <key>PLIST_VERSION</key>
-            <string>1</string>
             <key>BUNDLE_ID</key>
             <string>com.myjeans.app</string>
             <key>PROJECT_ID</key>
             <string>myjeans-app-v3</string>
             <key>GOOGLE_APP_ID</key>
             <string>${{ secrets.FIREBASE_GOOGLE_APP_ID }}</string>
-            <key>IS_ADS_ENABLED</key>
-            <false/>
-            <key>IS_ANALYTICS_ENABLED</key>
-            <false/>
-            <key>IS_APPINVITE_ENABLED</key>
-            <true/>
-            <key>IS_GCM_ENABLED</key>
-            <true/>
-            <key>IS_SIGNIN_ENABLED</key>
-            <true/>
+            <key>IS_ADS_ENABLED</key><false/>
+            <key>IS_ANALYTICS_ENABLED</key><false/>
+            <key>IS_APPINVITE_ENABLED</key><true/>
+            <key>IS_GCM_ENABLED</key><true/>
+            <key>IS_SIGNIN_ENABLED</key><true/>
         </dict>
         </plist>
         EOF
 
-    - name: Build for Generic iOS Device
+    - name: Build for Simulator
       run: |
         WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
-        
-        # Using CODE_SIGN_IDENTITY="-" performs an ad-hoc signature 
-        # which allows Firebase to recognize it as a valid bundle.
         xcodebuild build \
           -workspace "$WORKSPACE" \
           -scheme MyJeansApp \
-          -sdk iphoneos \
+          -sdk iphonesimulator \
           -configuration Debug \
           -derivedDataPath build \
-          CODE_SIGNING_ALLOWED=YES \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY="-" \
-          AD_HOC_CODE_SIGNING_ALLOWED=YES | tail -n 50
+          CODE_SIGNING_ALLOWED=NO
 
-    - name: Package IPA for Firebase
+    - name: Package for App Distribution
       run: |
-        rm -rf Payload MyJeansApp.ipa
-        
-        # 1. Find the bundle
-        REAL_APP_PATH=$(find build/Build/Products/Debug-iphoneos -name "*.app" -type d | head -1)
-        echo "Found App at: $REAL_APP_PATH"
-        
-        if [ -z "$REAL_APP_PATH" ]; then
-          echo "ERROR: Physical device build not found!"
-          exit 1
-        fi
+        # 1. Locate the .app bundle
+        APP_PATH=$(find build/Build/Products/Debug-iphonesimulator -name "*.app" -type d | head -1)
         
         # 2. Inject Plist
-        cp MyJeansApp/GoogleService-Info.plist "$REAL_APP_PATH/"
+        cp MyJeansApp/GoogleService-Info.plist "$APP_PATH/"
         
-        # 3. Create Payload and Copy
-        mkdir Payload
-        cp -Rp "$REAL_APP_PATH" Payload/
-        
-        # 4. Remove unnecessary Mac metadata that causes 'Invalid Bundle'
-        find Payload -name ".DS_Store" -delete
-        
-        # 5. Zip it
-        zip -r MyJeansApp.ipa Payload
+        # 3. Create a simple zip of the .app (App Distribution accepts this)
+        zip -r MyJeansApp.zip "$APP_PATH"
 
-    - name: Upload IPA
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: MyJeansApp-IPA
-        path: MyJeansApp.ipa
-        retention-days: 5
+        name: MyJeansApp-SIM
+        path: MyJeansApp.zip
