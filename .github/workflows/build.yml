@@ -1,13 +1,18 @@
 name: Build iOS App
+
 on:
   push:
-    branches: [ "init" ]
+    # CHANGE "main" to your branch name (e.g., "init" or "master")
+    branches: [ "main" ] 
+  # This line allows you to click "Run workflow" manually in the GitHub UI
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
@@ -19,7 +24,7 @@ jobs:
         gem install cocoapods
         pod install --repo-update
 
-    - name: Ensure Directory and Create GoogleService-Info.plist
+    - name: Create GoogleService-Info.plist from Secrets
       run: |
         mkdir -p MyJeansApp
         cat > MyJeansApp/GoogleService-Info.plist << 'EOF'
@@ -40,15 +45,15 @@ jobs:
             <key>GOOGLE_APP_ID</key>
             <string>${{ secrets.FIREBASE_GOOGLE_APP_ID }}</string>
             <key>IS_ADS_ENABLED</key>
-            <false></false>
+            <false/>
             <key>IS_ANALYTICS_ENABLED</key>
-            <false></false>
+            <false/>
             <key>IS_APPINVITE_ENABLED</key>
-            <true></true>
+            <true/>
             <key>IS_GCM_ENABLED</key>
-            <true></true>
+            <true/>
             <key>IS_SIGNIN_ENABLED</key>
-            <true></true>
+            <true/>
         </dict>
         </plist>
         EOF
@@ -66,7 +71,7 @@ jobs:
           CODE_SIGN_IDENTITY="" \
           | tail -50
 
-    - name: Package App and Inject Plist
+    - name: Package App for Firebase Test Lab (IPA Format)
       run: |
         echo "Searching for the app bundle..."
         REAL_APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d | grep "Debug-iphonesimulator" | head -1)
@@ -76,23 +81,27 @@ jobs:
           exit 1
         fi
 
-        # INJECTION STEP: Force the plist into the app bundle manually
-        echo "Injecting GoogleService-Info.plist into $REAL_APP_PATH"
+        # 1. Inject the plist into the bundle
         cp MyJeansApp/GoogleService-Info.plist "$REAL_APP_PATH/"
 
-        mkdir -p final_payload
-        cp -RL "$REAL_APP_PATH" final_payload/
+        # 2. Create the 'Payload' directory structure required for IPA files
+        mkdir -p Payload
         
+        # 3. Copy the app bundle into the Payload folder
+        cp -RL "$REAL_APP_PATH" Payload/
+        
+        # 4. Rename the bundle inside Payload if it's not named correctly
         APP_NAME=$(basename "$REAL_APP_PATH")
         if [ "$APP_NAME" != "MyJeansApp.app" ]; then
-          mv "final_payload/$APP_NAME" final_payload/MyJeansApp.app
+          mv "Payload/$APP_NAME" Payload/MyJeansApp.app
         fi
 
-        cd final_payload && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
+        # 5. Zip the Payload folder and name it .ipa for Firebase Uploader
+        zip -r MyJeansApp.ipa Payload
 
-    - name: Upload
+    - name: Upload IPA to GitHub Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: MyJeansApp-Simulator
-        path: MyJeansApp-Simulator.zip
+        name: MyJeansApp-Firebase-Ready
+        path: MyJeansApp.ipa
         retention-days: 5
