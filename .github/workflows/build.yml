@@ -51,23 +51,21 @@ jobs:
     - name: Build for Simulator
       run: |
         WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
-        xcodebuild build \
+        # We add 'clean' to fix asset errors and 'COMPILER_INDEX_STORE_ENABLE=NO' for speed
+        xcodebuild clean build \
           -workspace "$WORKSPACE" \
           -scheme MyJeansApp \
           -sdk iphonesimulator \
           -configuration Debug \
           -derivedDataPath build \
-          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_ALLOWED=NO \
+          COMPILER_INDEX_STORE_ENABLE=NO | tail -n 50
 
     - name: Package for App Distribution
       run: |
-        # 1. Locate the .app bundle
+        rm -rf Payload MyJeansApp.zip
         APP_PATH=$(find build/Build/Products/Debug-iphonesimulator -name "*.app" -type d | head -1)
-        
-        # 2. Inject Plist
         cp MyJeansApp/GoogleService-Info.plist "$APP_PATH/"
-        
-        # 3. Create a simple zip of the .app (App Distribution accepts this)
         zip -r MyJeansApp.zip "$APP_PATH"
 
     - name: Upload Artifact
