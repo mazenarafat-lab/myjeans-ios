@@ -56,42 +56,44 @@ jobs:
         </plist>
         EOF
 
-    - name: Build for Simulator
+    - name: Build for Generic iOS Device
       run: |
         WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
         
+        # We change -sdk to 'iphoneos' (Physical Device) instead of 'iphonesimulator'
         xcodebuild build \
           -workspace "$WORKSPACE" \
           -scheme MyJeansApp \
-          -sdk iphonesimulator \
+          -sdk iphoneos \
           -configuration Debug \
           -derivedDataPath build \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
-          ONLY_ACTIVE_ARCH=NO | tail -n 50
+          AD_HOC_CODE_SIGNING_ALLOWED=YES | tail -n 50
 
     - name: Package IPA for Firebase
       run: |
-        # 1. Clean up any old folders
         rm -rf Payload MyJeansApp.ipa
         
-        # 2. Locate the app bundle
-        REAL_APP_PATH=$(find build/Build/Products/Debug-iphonesimulator -name "*.app" -type d | head -1)
+        # 1. Find the bundle in the 'Debug-iphoneos' folder
+        REAL_APP_PATH=$(find build/Build/Products/Debug-iphoneos -name "*.app" -type d | head -1)
         echo "Found App at: $REAL_APP_PATH"
         
-        # 3. Inject Plist into the bundle
+        if [ -z "$REAL_APP_PATH" ]; then
+          echo "ERROR: Physical device build not found!"
+          exit 1
+        fi
+        
+        # 2. Inject Plist
         cp MyJeansApp/GoogleService-Info.plist "$REAL_APP_PATH/"
         
-        # 4. Create a fresh Payload folder
+        # 3. Create Payload and Zip
         mkdir Payload
-        
-        # 5. Copy the app bundle into Payload (using -p to preserve structure)
         cp -Rp "$REAL_APP_PATH" Payload/
         
-        # 6. Remove any hidden Mac system files that confuse Firebase
-        find Payload -name ".DS_Store" -depth -exec rm {} \;
+        # 4. Standardize name
+        mv Payload/*.app Payload/MyJeansApp.app
         
-        # 7. Zip it up. The Payload folder must be at the root of the zip.
         zip -r MyJeansApp.ipa Payload
 
     - name: Upload IPA
