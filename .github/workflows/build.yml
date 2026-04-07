@@ -2,9 +2,8 @@ name: Build iOS App
 
 on:
   push:
-    # CHANGE "main" to your branch name (e.g., "init" or "master")
-    branches: [ "903693b" ] 
-  # This line allows you to click "Run workflow" manually in the GitHub UI
+    # This matches your current branch name
+    branches: [ "903693b" ]
   workflow_dispatch:
 
 jobs:
@@ -24,7 +23,7 @@ jobs:
         gem install cocoapods
         pod install --repo-update
 
-    - name: Create GoogleService-Info.plist from Secrets
+    - name: Create GoogleService-Info.plist
       run: |
         mkdir -p MyJeansApp
         cat > MyJeansApp/GoogleService-Info.plist << 'EOF'
@@ -68,40 +67,34 @@ jobs:
           -configuration Debug \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY="" \
-          | tail -50
+          CODE_SIGN_IDENTITY=""
 
-    - name: Package App for Firebase Test Lab (IPA Format)
+    - name: Package IPA for Firebase
       run: |
-        echo "Searching for the app bundle..."
-        REAL_APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d | grep "Debug-iphonesimulator" | head -1)
-
-        if [ -z "$REAL_APP_PATH" ]; then
-          echo "ERROR: Could not find any .app bundle!"
+        # 1. Find the .app folder anywhere in the build results
+        APP_PATH=$(find . -name "*.app" -type d | grep "Debug" | head -1)
+        
+        if [ -z "$APP_PATH" ]; then 
+          echo "ERROR: App bundle not found! Printing directory tree for help:"
+          find . -maxdepth 3 -type d
           exit 1
         fi
-
-        # 1. Inject the plist into the bundle
-        cp MyJeansApp/GoogleService-Info.plist "$REAL_APP_PATH/"
-
-        # 2. Create the 'Payload' directory structure required for IPA files
+        
+        echo "Found App at: $APP_PATH"
+        
+        # 2. Inject your Firebase config into the app
+        cp MyJeansApp/GoogleService-Info.plist "$APP_PATH/"
+        
+        # 3. Create the Payload folder structure required by Firebase
         mkdir -p Payload
+        cp -RL "$APP_PATH" Payload/
         
-        # 3. Copy the app bundle into the Payload folder
-        cp -RL "$REAL_APP_PATH" Payload/
-        
-        # 4. Rename the bundle inside Payload if it's not named correctly
-        APP_NAME=$(basename "$REAL_APP_PATH")
-        if [ "$APP_NAME" != "MyJeansApp.app" ]; then
-          mv "Payload/$APP_NAME" Payload/MyJeansApp.app
-        fi
-
-        # 5. Zip the Payload folder and name it .ipa for Firebase Uploader
+        # 4. Zip it into an .ipa file
         zip -r MyJeansApp.ipa Payload
 
-    - name: Upload IPA to GitHub Artifacts
+    - name: Upload IPA
       uses: actions/upload-artifact@v4
       with:
-        name: MyJeansApp-Firebase-Ready
+        name: MyJeansApp-IPA
         path: MyJeansApp.ipa
         retention-days: 5
