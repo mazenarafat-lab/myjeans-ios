@@ -31,12 +31,24 @@ jobs:
             <string>${{ secrets.FIREBASE_API_KEY }}</string>
             <key>GCM_SENDER_ID</key>
             <string>${{ secrets.FIREBASE_GCM_SENDER_ID }}</string>
+            <key>PLIST_VERSION</key>
+            <string>1</string>
             <key>BUNDLE_ID</key>
             <string>com.myjeans.app</string>
             <key>PROJECT_ID</key>
             <string>myjeans-app-v3</string>
             <key>GOOGLE_APP_ID</key>
             <string>${{ secrets.FIREBASE_GOOGLE_APP_ID }}</string>
+            <key>IS_ADS_ENABLED</key>
+            <false></false>
+            <key>IS_ANALYTICS_ENABLED</key>
+            <false></false>
+            <key>IS_APPINVITE_ENABLED</key>
+            <true></true>
+            <key>IS_GCM_ENABLED</key>
+            <true></true>
+            <key>IS_SIGNIN_ENABLED</key>
+            <true></true>
         </dict>
         </plist>
         EOF
@@ -54,21 +66,23 @@ jobs:
           CODE_SIGN_IDENTITY="" \
           | tail -50
 
-    - name: Package App (Deep Scan)
+    - name: Package App and Inject Plist
       run: |
-        echo "Searching the entire server for the app bundle..."
+        echo "Searching for the app bundle..."
         REAL_APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d | grep "Debug-iphonesimulator" | head -1)
 
         if [ -z "$REAL_APP_PATH" ]; then
-          echo "ERROR: Could not find any .app bundle in Xcode cache!"
+          echo "ERROR: Could not find any .app bundle!"
           exit 1
         fi
 
-        echo "Found App at: $REAL_APP_PATH"
+        # INJECTION STEP: Force the plist into the app bundle manually
+        echo "Injecting GoogleService-Info.plist into $REAL_APP_PATH"
+        cp MyJeansApp/GoogleService-Info.plist "$REAL_APP_PATH/"
+
         mkdir -p final_payload
-
         cp -RL "$REAL_APP_PATH" final_payload/
-
+        
         APP_NAME=$(basename "$REAL_APP_PATH")
         if [ "$APP_NAME" != "MyJeansApp.app" ]; then
           mv "final_payload/$APP_NAME" final_payload/MyJeansApp.app
