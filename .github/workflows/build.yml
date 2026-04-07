@@ -3,7 +3,7 @@ name: Build iOS App
 on:
   push:
     # CHANGE "main" to your branch name (e.g., "init" or "master")
-    branches: [ "main" ] 
+    branches: [ "903693b" ] 
   # This line allows you to click "Run workflow" manually in the GitHub UI
   workflow_dispatch:
 
