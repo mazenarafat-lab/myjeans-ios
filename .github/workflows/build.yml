@@ -2,7 +2,6 @@ name: Build iOS App
 
 on:
   push:
-    # This matches your current branch name
     branches: [ "903693b" ]
   workflow_dispatch:
 
@@ -25,6 +24,7 @@ jobs:
 
     - name: Create GoogleService-Info.plist
       run: |
+        # Ensure the directory exists
         mkdir -p MyJeansApp
         cat > MyJeansApp/GoogleService-Info.plist << 'EOF'
         <?xml version="1.0" encoding="UTF-8"?>
@@ -59,37 +59,39 @@ jobs:
 
     - name: Build for Simulator
       run: |
+        # This command finds the workspace and scheme automatically to prevent Code 65
+        WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
+        SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" | grep -A 10 "Schemes:" | tail -n +2 | xargs | cut -d ' ' -f 1)
+        
+        echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
+        
         xcodebuild build \
-          -workspace MyJeansApp.xcworkspace \
-          -scheme MyJeansApp \
+          -workspace "$WORKSPACE" \
+          -scheme "$SCHEME" \
           -sdk iphonesimulator \
           -destination 'platform=iOS Simulator,name=iPhone 16' \
           -configuration Debug \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY=""
+          CODE_SIGN_IDENTITY="" \
+          COMPILER_INDEX_STORE_ENABLE=NO | tail -n 100
 
     - name: Package IPA for Firebase
       run: |
-        # 1. Find the .app folder anywhere in the build results
+        # Find the .app folder
         APP_PATH=$(find . -name "*.app" -type d | grep "Debug" | head -1)
         
         if [ -z "$APP_PATH" ]; then 
-          echo "ERROR: App bundle not found! Printing directory tree for help:"
-          find . -maxdepth 3 -type d
+          echo "ERROR: App bundle not found!"
           exit 1
         fi
         
-        echo "Found App at: $APP_PATH"
-        
-        # 2. Inject your Firebase config into the app
+        # Inject Plist
         cp MyJeansApp/GoogleService-Info.plist "$APP_PATH/"
         
-        # 3. Create the Payload folder structure required by Firebase
+        # Create Payload for IPA
         mkdir -p Payload
         cp -RL "$APP_PATH" Payload/
-        
-        # 4. Zip it into an .ipa file
         zip -r MyJeansApp.ipa Payload
 
     - name: Upload IPA
@@ -97,4 +99,3 @@ jobs:
       with:
         name: MyJeansApp-IPA
         path: MyJeansApp.ipa
-        retention-days: 5
