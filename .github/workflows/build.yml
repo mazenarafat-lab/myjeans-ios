@@ -60,22 +60,24 @@ jobs:
       run: |
         WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
         
+        # Using CODE_SIGN_IDENTITY="-" performs an ad-hoc signature 
+        # which allows Firebase to recognize it as a valid bundle.
         xcodebuild build \
           -workspace "$WORKSPACE" \
           -scheme MyJeansApp \
           -sdk iphoneos \
           -configuration Debug \
           -derivedDataPath build \
-          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_ALLOWED=YES \
           CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY="-" \
           AD_HOC_CODE_SIGNING_ALLOWED=YES | tail -n 50
 
     - name: Package IPA for Firebase
       run: |
-        # 1. Clean up old files
         rm -rf Payload MyJeansApp.ipa
         
-        # 2. Find the bundle
+        # 1. Find the bundle
         REAL_APP_PATH=$(find build/Build/Products/Debug-iphoneos -name "*.app" -type d | head -1)
         echo "Found App at: $REAL_APP_PATH"
         
@@ -84,14 +86,17 @@ jobs:
           exit 1
         fi
         
-        # 3. Inject Plist
+        # 2. Inject Plist
         cp MyJeansApp/GoogleService-Info.plist "$REAL_APP_PATH/"
         
-        # 4. Create Payload and Copy
+        # 3. Create Payload and Copy
         mkdir Payload
         cp -Rp "$REAL_APP_PATH" Payload/
         
-        # 5. Zip it (Rename line removed to prevent "Invalid Argument" error)
+        # 4. Remove unnecessary Mac metadata that causes 'Invalid Bundle'
+        find Payload -name ".DS_Store" -delete
+        
+        # 5. Zip it
         zip -r MyJeansApp.ipa Payload
 
     - name: Upload IPA
