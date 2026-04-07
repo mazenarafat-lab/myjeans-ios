@@ -1,7 +1,7 @@
 name: Build iOS App
 on:
   push:
-    branches: [ "903693b" ]
+    branches: [ "init" ]
   workflow_dispatch:
 jobs:
   build:
@@ -17,7 +17,6 @@ jobs:
     - name: Install CocoaPods
       run: |
         gem install cocoapods
-        pod repo add-cdn trunk https://cdn.cocoapods.org/
         pod install --repo-update
 
     - name: Ensure Directory and Create GoogleService-Info.plist
@@ -44,7 +43,6 @@ jobs:
 
     - name: Build for Simulator
       run: |
-        # Build without forcing a path - let Xcode use its default cache
         xcodebuild build \
           -workspace MyJeansApp.xcworkspace \
           -scheme MyJeansApp \
@@ -59,23 +57,23 @@ jobs:
     - name: Package App (Deep Scan)
       run: |
         echo "Searching the entire server for the app bundle..."
-        # This finds the real .app folder anywhere in the system-wide build cache
         REAL_APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d | grep "Debug-iphonesimulator" | head -1)
-        
+
         if [ -z "$REAL_APP_PATH" ]; then
           echo "ERROR: Could not find any .app bundle in Xcode cache!"
           exit 1
         fi
-        
+
         echo "Found App at: $REAL_APP_PATH"
         mkdir -p final_payload
-        
-        # Copy the actual folder (dereferencing symlinks)
+
         cp -RL "$REAL_APP_PATH" final_payload/
-        
-        # Rename it to a standard name for the zip
-        mv final_payload/*.app final_payload/MyJeansApp.app
-        
+
+        APP_NAME=$(basename "$REAL_APP_PATH")
+        if [ "$APP_NAME" != "MyJeansApp.app" ]; then
+          mv "final_payload/$APP_NAME" final_payload/MyJeansApp.app
+        fi
+
         cd final_payload && zip -r ../MyJeansApp-Simulator.zip MyJeansApp.app
 
     - name: Upload
