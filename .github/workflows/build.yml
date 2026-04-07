@@ -59,16 +59,19 @@ jobs:
     - name: Build for Simulator
       run: |
         WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
-        SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" | grep -A 10 "Schemes:" | tail -n +2 | xargs | cut -d ' ' -f 1)
+        # Find the first scheme that isn't Pods
+        SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" | grep -A 10 "Schemes:" | grep -v "Pods" | sed -n '2p' | xargs)
         
         echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
         
+        # We add -derivedDataPath build to force the output location
         xcodebuild build \
           -workspace "$WORKSPACE" \
           -scheme "$SCHEME" \
           -sdk iphonesimulator \
           -destination 'platform=iOS Simulator,name=iPhone 16' \
           -configuration Debug \
+          -derivedDataPath build \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
@@ -76,35 +79,27 @@ jobs:
 
     - name: Package IPA for Firebase
       run: |
-        # 1. Search in the global Xcode DerivedData folder (The Hidden Place)
-        echo "Searching global Xcode directory..."
-        REAL_APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d | grep "Debug-iphonesimulator" | head -1)
-        
-        # 2. Fallback: Search the local workspace
-        if [ -z "$REAL_APP_PATH" ]; then
-          echo "Not found in global, searching local workspace..."
-          REAL_APP_PATH=$(find . -name "*.app" -type d | grep "Debug" | head -1)
-        fi
+        # 1. Search in the forced build directory
+        echo "Searching forced build directory..."
+        REAL_APP_PATH=$(find build -name "*.app" -type d | head -1)
 
         if [ -z "$REAL_APP_PATH" ]; then 
-          echo "ERROR: App bundle still not found!"
+          echo "ERROR: App bundle still not found! Printing build folder content:"
+          ls -R build
           exit 1
         fi
         
         echo "Found App at: $REAL_APP_PATH"
         
-        # 3. Inject Plist
+        # 2. Inject Plist
         cp MyJeansApp/GoogleService-Info.plist "$REAL_APP_PATH/"
         
-        # 4. Create Payload for IPA
+        # 3. Create Payload for IPA
         mkdir -p Payload
         cp -RL "$REAL_APP_PATH" Payload/
         
-        # 5. Ensure the bundle is named correctly inside Payload
-        APP_NAME=$(basename "$REAL_APP_PATH")
-        if [ "$APP_NAME" != "MyJeansApp.app" ]; then
-          mv "Payload/$APP_NAME" Payload/MyJeansApp.app
-        fi
+        # 4. Standardize name for Firebase
+        mv Payload/*.app Payload/MyJeansApp.app
         
         zip -r MyJeansApp.ipa Payload
 
