@@ -58,13 +58,10 @@ jobs:
 
     - name: Build for Simulator
       run: |
-        # Find the Workspace
         WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
         
-        # This list command will help us see exactly what schemes are available if it fails
-        xcodebuild -list -workspace "$WORKSPACE"
-        
-        # Build specifically to the 'build' folder
+        # We add 'ONLY_ACTIVE_ARCH=NO' and build only the main scheme 
+        # to avoid errors in the notification extension targets.
         xcodebuild build \
           -workspace "$WORKSPACE" \
           -scheme MyJeansApp \
@@ -72,16 +69,17 @@ jobs:
           -configuration Debug \
           -derivedDataPath build \
           CODE_SIGNING_ALLOWED=NO \
-          CODE_SIGNING_REQUIRED=NO
+          CODE_SIGNING_REQUIRED=NO \
+          ONLY_ACTIVE_ARCH=NO | tail -n 50
 
     - name: Package IPA for Firebase
       run: |
-        # Search everywhere for the .app file
-        REAL_APP_PATH=$(find build -name "*.app" -type d | head -1)
+        # Find the .app file in the specific Build products folder
+        REAL_APP_PATH=$(find build/Build/Products/Debug-iphonesimulator -name "*.app" -type d | head -1)
 
         if [ -z "$REAL_APP_PATH" ]; then 
-          echo "ERROR: App bundle still not found! Listing everything in build/Build/Products:"
-          ls -R build/Build/Products || echo "Products folder not found"
+          echo "ERROR: App bundle not found! Listing Products folder:"
+          ls -R build/Build/Products
           exit 1
         fi
         
@@ -94,7 +92,7 @@ jobs:
         mkdir -p Payload
         cp -RL "$REAL_APP_PATH" Payload/
         
-        # Rename for consistency
+        # Standardize name for Firebase
         mv Payload/*.app Payload/MyJeansApp.app
         
         zip -r MyJeansApp.ipa Payload
