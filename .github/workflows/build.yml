@@ -60,8 +60,6 @@ jobs:
       run: |
         WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
         
-        # We add 'ONLY_ACTIVE_ARCH=NO' and build only the main scheme 
-        # to avoid errors in the notification extension targets.
         xcodebuild build \
           -workspace "$WORKSPACE" \
           -scheme MyJeansApp \
@@ -74,27 +72,18 @@ jobs:
 
     - name: Package IPA for Firebase
       run: |
-        # Find the .app file in the specific Build products folder
+        # 1. Locate the app
         REAL_APP_PATH=$(find build/Build/Products/Debug-iphonesimulator -name "*.app" -type d | head -1)
-
-        if [ -z "$REAL_APP_PATH" ]; then 
-          echo "ERROR: App bundle not found! Listing Products folder:"
-          ls -R build/Build/Products
-          exit 1
-        fi
-        
         echo "Found App at: $REAL_APP_PATH"
         
-        # Inject Plist
+        # 2. Inject Plist
         cp MyJeansApp/GoogleService-Info.plist "$REAL_APP_PATH/"
         
-        # Create Payload for IPA
+        # 3. Create Payload folder for the IPA
         mkdir -p Payload
         cp -RL "$REAL_APP_PATH" Payload/
         
-        # Standardize name for Firebase
-        mv Payload/*.app Payload/MyJeansApp.app
-        
+        # 4. Zip it (Removed the buggy rename line)
         zip -r MyJeansApp.ipa Payload
 
     - name: Upload IPA
