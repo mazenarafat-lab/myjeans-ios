@@ -58,47 +58,43 @@ jobs:
 
     - name: Build for Simulator
       run: |
+        # Find the Workspace
         WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
-        # Find the first scheme that isn't Pods
-        SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" | grep -A 10 "Schemes:" | grep -v "Pods" | sed -n '2p' | xargs)
         
-        echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
+        # This list command will help us see exactly what schemes are available if it fails
+        xcodebuild -list -workspace "$WORKSPACE"
         
-        # We add -derivedDataPath build to force the output location
+        # Build specifically to the 'build' folder
         xcodebuild build \
           -workspace "$WORKSPACE" \
-          -scheme "$SCHEME" \
+          -scheme MyJeansApp \
           -sdk iphonesimulator \
-          -destination 'platform=iOS Simulator,name=iPhone 16' \
           -configuration Debug \
           -derivedDataPath build \
           CODE_SIGNING_ALLOWED=NO \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY="" \
-          COMPILER_INDEX_STORE_ENABLE=NO | tail -n 50
+          CODE_SIGNING_REQUIRED=NO
 
     - name: Package IPA for Firebase
       run: |
-        # 1. Search in the forced build directory
-        echo "Searching forced build directory..."
+        # Search everywhere for the .app file
         REAL_APP_PATH=$(find build -name "*.app" -type d | head -1)
 
         if [ -z "$REAL_APP_PATH" ]; then 
-          echo "ERROR: App bundle still not found! Printing build folder content:"
-          ls -R build
+          echo "ERROR: App bundle still not found! Listing everything in build/Build/Products:"
+          ls -R build/Build/Products || echo "Products folder not found"
           exit 1
         fi
         
         echo "Found App at: $REAL_APP_PATH"
         
-        # 2. Inject Plist
+        # Inject Plist
         cp MyJeansApp/GoogleService-Info.plist "$REAL_APP_PATH/"
         
-        # 3. Create Payload for IPA
+        # Create Payload for IPA
         mkdir -p Payload
         cp -RL "$REAL_APP_PATH" Payload/
         
-        # 4. Standardize name for Firebase
+        # Rename for consistency
         mv Payload/*.app Payload/MyJeansApp.app
         
         zip -r MyJeansApp.ipa Payload
